@@ -3,13 +3,11 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use rodio::{Decoder, OutputStream, Sink};
+use rodio::{Decoder, Sink};
 use std::{
     error::Error,
-    ffi::{OsStr, OsString},
     fs::{self, File},
     io::{self, BufReader},
-    path::Path,
     time::{Duration, Instant},
 };
 use tui::{
@@ -23,14 +21,6 @@ use tui::{
 use unicode_width::UnicodeWidthStr;
 
 use crate::parse;
-
-const PATH: &Path = Path::new("/home/cjh/yt-dlp/music/");
-
-const TASKS: [&str; 24] = [
-    "Item1", "Item2", "Item3", "Item4", "Item5", "Item6", "Item7", "Item8", "Item9", "Item10",
-    "Item11", "Item12", "Item13", "Item14", "Item15", "Item16", "Item17", "Item18", "Item19",
-    "Item20", "Item21", "Item22", "Item23", "Item24",
-];
 
 pub struct Tabstatus<'a> {
     pub titles: Vec<&'a str>,
@@ -106,11 +96,12 @@ pub struct App<'a> {
     pub progress: f64,
     pub quit: bool,
     pub barchart_data: Vec<(&'a str, u64)>,
-    pub tasks: StatefulList<&'a str>,
+    pub tasks: StatefulList<String>,
     pub input: String,
     pub input_mode: InputMode,
     pub messages: Vec<String>,
     pub show_popup: bool,
+    pub playing_music: Option<Decoder<BufReader<File>>>,
 }
 
 impl<'a> App<'a> {
@@ -145,12 +136,12 @@ impl<'a> App<'a> {
                 ("B23", 3),
                 ("B24", 5),
             ],
-            // tasks: StatefulList::with_items(TASKS.to_vec()),
-            tasks: StatefulList::with_items(parse::playlist(PATH).into()),
+            tasks: StatefulList::with_items(parse::playlist()),
             input: String::new(),
             input_mode: InputMode::Normal,
             messages: Vec::new(),
             show_popup: false,
+            playing_music: None,
         }
     }
 
@@ -186,7 +177,16 @@ impl<'a> App<'a> {
         self.barchart_data.insert(0, value);
     }
 
-    fn key(&mut self, c: char, sink: &Sink) {
+    fn music_play(&mut self, sink: &mut Sink) {
+        sink.stop();
+        let offset = self.tasks.state.selected().unwrap();
+        let file = BufReader::new(File::open(self.tasks.items.get(offset).unwrap()).unwrap());
+        let source = Decoder::new(file).unwrap();
+        sink.append(source);
+        sink.play();
+    }
+
+    fn key(&mut self, c: char, sink: &mut Sink) {
         match c {
             'q' => self.quit = true,
             'i' => self.input_mode = InputMode::Editing,
@@ -201,7 +201,7 @@ impl<'a> App<'a> {
     }
 }
 
-fn draw_gauge<B>(f: &mut Frame<B>, app: &App, chunk: Rect)
+fn draw_gauge<B>(f: &mut Frame<B>, app: &App, chunk: Rect, sink: &Sink)
 where
     B: Backend,
 {
@@ -211,8 +211,11 @@ where
             .fg(Color::White)
             .add_modifier(Modifier::ITALIC | Modifier::BOLD),
     );
+    // let position = sink.position().unwrap().as_secs() as f64;
+    // let duration = sink.duration().unwrap().as_secs() as f64;
+    // let progress = (position / duration) * 100.0;
     let gauge = Gauge::default()
-        .block(Block::default().title("Gauge1").borders(Borders::ALL))
+        .block(Block::default().title("Progress").borders(Borders::ALL))
         .gauge_style(Style::default().fg(Color::Yellow))
         .label(label)
         .ratio(app.progress)
@@ -272,7 +275,8 @@ where
         .tasks
         .items
         .iter()
-        .map(|i| ListItem::new(vec![Spans::from(Span::raw(*i))]))
+        .map(|item| item.split_at(item.rfind('/').unwrap() + 1).1)
+        .map(|i| ListItem::new(vec![Spans::from(Span::raw(i.clone()))]))
         .collect();
     let tasks = List::new(tasks)
         .block(Block::default().borders(Borders::ALL).title("List"))
@@ -312,17 +316,17 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-fn draw_first_tab<B>(f: &mut Frame<B>, app: &mut App, chunk: Rect)
+fn draw_first_tab<B>(f: &mut Frame<B>, app: &mut App, chunk: Rect, sink: &Sink)
 where
     B: Backend,
 {
     let chunks = Layout::default()
         .constraints([Constraint::Percentage(6), Constraint::Min(0)].as_ref())
         .split(chunk);
-    draw_gauge(f, app, chunks[0]);
+    draw_gauge(f, app, chunks[0], &sink);
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(70)].as_ref())
         .split(chunks[1]);
     draw_list(f, app, chunks[0]);
     draw_messages(f, app, chunks[1]);
@@ -347,9 +351,9 @@ where
     f.render_widget(barchart, chunk);
 }
 
-pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
+pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App, sink: &Sink) {
     match app.tabs.index {
-        0 => draw_first_tab(f, app, f.size()),
+        0 => draw_first_tab(f, app, f.size(), &sink),
         1 => draw_second_tab(f, app, f.size()),
         _ => {}
     }
@@ -359,11 +363,11 @@ pub fn run<B: Backend>(
     terminal: &mut Terminal<B>,
     mut app: App,
     tick_rate: Duration,
-    sink: Sink,
+    mut sink: Sink,
 ) -> io::Result<()> {
     let mut last_tick = Instant::now();
     loop {
-        terminal.draw(|f| ui(f, &mut app))?;
+        terminal.draw(|f| ui(f, &mut app, &sink))?;
         let timeout = tick_rate
             .checked_sub(last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));
@@ -371,7 +375,8 @@ pub fn run<B: Backend>(
             if let Event::Key(key) = event::read()? {
                 match app.input_mode {
                     InputMode::Normal => match key.code {
-                        KeyCode::Char(c) => app.key(c, &sink),
+                        KeyCode::Enter => app.music_play(&mut sink),
+                        KeyCode::Char(c) => app.key(c, &mut sink),
                         _ => {}
                     },
                     InputMode::Editing => match key.code {
