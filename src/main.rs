@@ -1,16 +1,13 @@
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use rodio::{Decoder, OutputStream, Sink};
+use rodio::{OutputStream, Sink};
 use std::error::Error;
 use std::io;
 use std::time::Duration;
-use tui::{
-    backend::{Backend, CrosstermBackend},
-    Terminal,
-};
+use tui::{backend::CrosstermBackend, Terminal};
 
 mod parse;
 mod ui;

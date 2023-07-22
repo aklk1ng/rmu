@@ -1,8 +1,4 @@
-use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
+use crossterm::event::{self, Event, KeyCode};
 use rodio::{Decoder, Sink};
 use std::{
     error::Error,
@@ -11,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tui::{
-    backend::{Backend, CrosstermBackend},
+    backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
@@ -276,7 +272,7 @@ where
         .items
         .iter()
         .map(|item| item.split_at(item.rfind('/').unwrap() + 1).1)
-        .map(|i| ListItem::new(vec![Spans::from(Span::raw(i.clone()))]))
+        .map(|i| ListItem::new(vec![Spans::from(Span::raw(i.to_owned()))]))
         .collect();
     let tasks = List::new(tasks)
         .block(Block::default().borders(Borders::ALL).title("List"))
