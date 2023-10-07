@@ -1,13 +1,13 @@
+use std::{error::Error, io, time::Duration};
+
+use cpal::traits::HostTrait;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use ratatui::{prelude::*, widgets::*};
 use rodio::{OutputStream, Sink};
-use std::error::Error;
-use std::io;
-use std::time::Duration;
-use tui::{backend::CrosstermBackend, Terminal};
 
 mod parse;
 mod ui;
@@ -38,6 +38,5 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Err(err) = res {
         println!("{:?}", err)
     }
-
     Ok(())
 }

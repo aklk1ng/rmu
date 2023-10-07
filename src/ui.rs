@@ -1,20 +1,20 @@
 use crossterm::event::{self, Event, KeyCode};
-use rodio::{Decoder, Sink};
+use ratatui::{
+    backend::Backend,
+    layout::{Constraint, Layout, Rect},
+    prelude::*,
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::*,
+    Frame, Terminal,
+};
+use rodio::Decoder;
+use rodio::{OutputStream, Sink};
 use std::{
-    error::Error,
-    fs::{self, File},
+    fs::File,
     io::{self, BufReader},
     time::{Duration, Instant},
 };
-use tui::{
-    backend::Backend,
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Span, Spans},
-    widgets::{BarChart, Block, Borders, Gauge, List, ListItem, ListState, Paragraph},
-    Frame, Terminal,
-};
-use unicode_width::UnicodeWidthStr;
 
 use crate::parse;
 
@@ -83,20 +83,13 @@ impl<T> StatefulList<T> {
     }
 }
 
-pub enum InputMode {
-    Normal,
-    Editing,
-}
 pub struct App<'a> {
     pub tabs: Tabstatus<'a>,
     pub progress: f64,
     pub quit: bool,
     pub barchart_data: Vec<(&'a str, u64)>,
     pub tasks: StatefulList<String>,
-    pub input: String,
-    pub input_mode: InputMode,
     pub messages: Vec<String>,
-    pub show_popup: bool,
     pub playing_music: Option<Decoder<BufReader<File>>>,
 }
 
@@ -133,10 +126,7 @@ impl<'a> App<'a> {
                 ("B24", 5),
             ],
             tasks: StatefulList::with_items(parse::playlist()),
-            input: String::new(),
-            input_mode: InputMode::Normal,
             messages: Vec::new(),
-            show_popup: false,
             playing_music: None,
         }
     }
@@ -173,8 +163,15 @@ impl<'a> App<'a> {
         self.barchart_data.insert(0, value);
     }
 
+    fn load_playlist(&mut self, sink: &mut Sink) {
+        for f in self.tasks.items.iter() {
+            let file = BufReader::new(File::open(f.clone()).unwrap());
+            let source = Decoder::new(file).unwrap();
+            sink.append(source);
+        }
+    }
+
     fn music_play(&mut self, sink: &mut Sink) {
-        sink.stop();
         let offset = self.tasks.state.selected().unwrap();
         let file = BufReader::new(File::open(self.tasks.items.get(offset).unwrap()).unwrap());
         let source = Decoder::new(file).unwrap();
@@ -185,13 +182,11 @@ impl<'a> App<'a> {
     fn key(&mut self, c: char, sink: &mut Sink) {
         match c {
             'q' => self.quit = true,
-            'i' => self.input_mode = InputMode::Editing,
             'h' => self.to_left(),
             'l' => self.to_right(),
             ' ' => self.toggle(&sink),
             'j' => self.on_down(),
             'k' => self.on_up(),
-            'p' => self.show_popup = !self.show_popup,
             _ => {}
         }
     }
@@ -219,60 +214,16 @@ where
     f.render_widget(gauge, chunk);
 }
 
-fn draw_messages<B>(f: &mut Frame<B>, app: &mut App, chunk: Rect)
-where
-    B: Backend,
-{
-    let messages: Vec<ListItem> = app
-        .messages
-        .iter()
-        .enumerate()
-        .map(|(i, m)| {
-            let content = vec![Spans::from(Span::raw(format!("{}: {}", i, m)))];
-            ListItem::new(content)
-        })
-        .collect();
-    let messages =
-        List::new(messages).block(Block::default().borders(Borders::ALL).title("Messages"));
-    f.render_widget(messages, chunk);
-}
-
 fn draw_list<B>(f: &mut Frame<B>, app: &mut App, chunk: Rect)
 where
     B: Backend,
 {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
-        .split(chunk);
-    let input = Paragraph::new(app.input.as_ref())
-        .style(match app.input_mode {
-            InputMode::Normal => Style::default(),
-            InputMode::Editing => Style::default().fg(Color::Yellow),
-        })
-        .block(Block::default().borders(Borders::ALL).title("Input"));
-    f.render_widget(input, chunks[0]);
-    match app.input_mode {
-        InputMode::Normal =>
-            // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
-            {}
-
-        InputMode::Editing => {
-            // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
-            f.set_cursor(
-                // Put cursor past the end of the input text
-                chunks[0].x + app.input.width() as u16 + 1,
-                // Move one line down, from the border to the input line
-                chunks[0].y + 1,
-            )
-        }
-    }
     let tasks: Vec<ListItem> = app
         .tasks
         .items
         .iter()
         .map(|item| item.split_at(item.rfind('/').unwrap() + 1).1)
-        .map(|i| ListItem::new(vec![Spans::from(Span::raw(i.to_owned()))]))
+        .map(|i| ListItem::new(vec![Line::from(Span::raw(i.to_owned()))]))
         .collect();
     let tasks = List::new(tasks)
         .block(Block::default().borders(Borders::ALL).title("List"))
@@ -282,34 +233,7 @@ where
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("> ");
-    f.render_stateful_widget(tasks, chunks[1], &mut app.tasks.state);
-}
-
-/// helper function to create a centered rect using up certain percentage of the available rect `r`
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_y) / 2),
-                Constraint::Percentage(percent_y),
-                Constraint::Percentage((100 - percent_y) / 2),
-            ]
-            .as_ref(),
-        )
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_x) / 2),
-                Constraint::Percentage(percent_x),
-                Constraint::Percentage((100 - percent_x) / 2),
-            ]
-            .as_ref(),
-        )
-        .split(popup_layout[1])[1]
+    f.render_stateful_widget(tasks, chunk, &mut app.tasks.state);
 }
 
 fn draw_first_tab<B>(f: &mut Frame<B>, app: &mut App, chunk: Rect, sink: &Sink)
@@ -320,18 +244,7 @@ where
         .constraints([Constraint::Percentage(6), Constraint::Min(0)].as_ref())
         .split(chunk);
     draw_gauge(f, app, chunks[0], &sink);
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(70)].as_ref())
-        .split(chunks[1]);
-    draw_list(f, app, chunks[0]);
-    draw_messages(f, app, chunks[1]);
-
-    if app.show_popup {
-        let block = Block::default().title("Popup").borders(Borders::ALL);
-        let area = centered_rect(60, 20, f.size());
-        f.render_widget(block, area);
-    }
+    draw_list(f, app, chunks[1]);
 }
 
 fn draw_second_tab<B>(f: &mut Frame<B>, app: &App, chunk: Rect)
@@ -347,7 +260,10 @@ where
     f.render_widget(barchart, chunk);
 }
 
-pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App, sink: &Sink) {
+pub fn ui<B>(f: &mut Frame<B>, app: &mut App, sink: &Sink)
+where
+    B: Backend,
+{
     match app.tabs.index {
         0 => draw_first_tab(f, app, f.size(), &sink),
         1 => draw_second_tab(f, app, f.size()),
@@ -364,28 +280,16 @@ pub fn run<B: Backend>(
     let mut last_tick = Instant::now();
     loop {
         terminal.draw(|f| ui(f, &mut app, &sink))?;
+        // app.load_playlist(&mut sink);
         let timeout = tick_rate
             .checked_sub(last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));
         if crossterm::event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
-                match app.input_mode {
-                    InputMode::Normal => match key.code {
-                        KeyCode::Enter => app.music_play(&mut sink),
-                        KeyCode::Char(c) => app.key(c, &mut sink),
-                        _ => {}
-                    },
-                    InputMode::Editing => match key.code {
-                        KeyCode::Esc => app.input_mode = InputMode::Normal,
-                        KeyCode::Backspace => {
-                            app.input.pop();
-                        }
-                        KeyCode::Enter => {
-                            app.messages.push(app.input.drain(..).collect());
-                        }
-                        KeyCode::Char(c) => app.input.push(c),
-                        _ => {}
-                    },
+                match key.code {
+                    KeyCode::Enter => app.music_play(&mut sink),
+                    KeyCode::Char(c) => app.key(c, &mut sink),
+                    _ => {}
                 }
             }
         }
