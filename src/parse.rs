@@ -35,13 +35,10 @@ pub fn playlist() -> Vec<String> {
     playlist
 }
 
-mod tests {
-    use super::*;
-    #[test]
-    fn test_play_list() {
-        let entries = playlist();
-        for entry in entries {
-            println!("{:?}", entry);
-        }
+#[test]
+fn test_play_list() {
+    let entries = playlist();
+    for entry in entries {
+        println!("{:?}", entry);
     }
 }
