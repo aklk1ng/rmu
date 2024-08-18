@@ -57,7 +57,9 @@ impl<T> StatefulList<T> {
     pub fn next(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
-                if i >= self.items.len() - 1 {
+                if self.items.len() == 0 {
+                    return;
+                } else if i >= self.items.len() - 1 {
                     0
                 } else {
                     i + 1
@@ -71,7 +73,9 @@ impl<T> StatefulList<T> {
     pub fn previous(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
-                if i == 0 {
+                if self.items.len() == 0 {
+                    return;
+                } else if i == 0 {
                     self.items.len() - 1
                 } else {
                     i - 1
@@ -173,10 +177,17 @@ impl<'a> App<'a> {
 
     fn music_play(&mut self, sink: &mut Sink) {
         let offset = self.tasks.state.selected().unwrap();
-        let file = BufReader::new(File::open(self.tasks.items.get(offset).unwrap()).unwrap());
-        let source = Decoder::new(file).unwrap();
-        sink.append(source);
-        sink.play();
+        let n = self.tasks.items.len();
+        for i in offset..n {
+            let file = BufReader::new(File::open(&self.tasks.items[i]).unwrap());
+            let source = Decoder::new(file).unwrap();
+            sink.append(source);
+            sink.play();
+        }
+        // let file = BufReader::new(File::open(self.tasks.items.get(offset).unwrap()).unwrap());
+        // let source = Decoder::new(file).unwrap();
+        // sink.append(source);
+        // sink.play();
     }
 
     fn key(&mut self, c: char, sink: &mut Sink) {
@@ -231,8 +242,7 @@ where
             Style::default()
                 .fg(Color::Blue)
                 .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol("> ");
+        );
     f.render_stateful_widget(tasks, chunk, &mut app.tasks.state);
 }
 
@@ -280,7 +290,6 @@ pub fn run<B: Backend>(
     let mut last_tick = Instant::now();
     loop {
         terminal.draw(|f| ui(f, &mut app, &sink))?;
-        // app.load_playlist(&mut sink);
         let timeout = tick_rate
             .checked_sub(last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));

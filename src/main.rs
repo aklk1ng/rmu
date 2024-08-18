@@ -1,6 +1,5 @@
 use std::{error::Error, io, time::Duration};
 
-use cpal::traits::HostTrait;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
