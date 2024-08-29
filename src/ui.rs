@@ -1,22 +1,17 @@
-use crossterm::event::{self, Event, KeyCode};
+use crate::app::*;
+use color_eyre::Result;
+use crossterm::event::{self};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout, Rect},
-    prelude::*,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::*,
     Frame, Terminal,
 };
-use rodio::Decoder;
-use rodio::{OutputStream, Sink};
-use std::{
-    fs::File,
-    io::{self, BufReader},
-    time::{Duration, Instant},
-};
-
-use crate::parse;
+use rodio::OutputStream;
+use rodio::Sink;
+use std::time::Duration;
 
 pub struct Tabstatus<'a> {
     pub titles: Vec<&'a str>,
@@ -24,15 +19,15 @@ pub struct Tabstatus<'a> {
 }
 
 impl<'a> Tabstatus<'a> {
-    fn new(titles: Vec<&'a str>) -> Tabstatus {
+    pub fn new(titles: Vec<&'a str>) -> Tabstatus {
         Tabstatus { titles, index: 0 }
     }
 
-    fn next(&mut self) {
+    pub fn next(&mut self) {
         self.index = (self.index + 1) % self.titles.len()
     }
 
-    fn previous(&mut self) {
+    pub fn previous(&mut self) {
         if self.index > 0 {
             self.index -= 1
         } else {
@@ -57,7 +52,7 @@ impl<T> StatefulList<T> {
     pub fn next(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
-                if self.items.len() == 0 {
+                if self.items.is_empty() {
                     return;
                 } else if i >= self.items.len() - 1 {
                     0
@@ -73,7 +68,7 @@ impl<T> StatefulList<T> {
     pub fn previous(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
-                if self.items.len() == 0 {
+                if self.items.is_empty() {
                     return;
                 } else if i == 0 {
                     self.items.len() - 1
@@ -87,157 +82,38 @@ impl<T> StatefulList<T> {
     }
 }
 
-pub struct App<'a> {
-    pub tabs: Tabstatus<'a>,
-    pub progress: f64,
-    pub quit: bool,
-    pub barchart_data: Vec<(&'a str, u64)>,
-    pub tasks: StatefulList<String>,
-    pub messages: Vec<String>,
-    pub playing_music: Option<Decoder<BufReader<File>>>,
-}
-
-impl<'a> App<'a> {
-    pub fn new() -> App<'a> {
-        App {
-            tabs: Tabstatus::new(vec!["Tab1", "Tab2"]),
-            progress: 0.0,
-            quit: false,
-            barchart_data: vec![
-                ("B1", 9),
-                ("B2", 12),
-                ("B3", 5),
-                ("B4", 8),
-                ("B5", 2),
-                ("B6", 4),
-                ("B7", 5),
-                ("B8", 9),
-                ("B9", 14),
-                ("B10", 15),
-                ("B11", 1),
-                ("B12", 0),
-                ("B13", 4),
-                ("B14", 6),
-                ("B15", 4),
-                ("B16", 6),
-                ("B17", 4),
-                ("B18", 7),
-                ("B19", 13),
-                ("B20", 8),
-                ("B21", 11),
-                ("B22", 9),
-                ("B23", 3),
-                ("B24", 5),
-            ],
-            tasks: StatefulList::with_items(parse::playlist()),
-            messages: Vec::new(),
-            playing_music: None,
-        }
-    }
-
-    fn on_up(&mut self) {
-        self.tasks.previous();
-    }
-
-    fn on_down(&mut self) {
-        self.tasks.next();
-    }
-    fn to_right(&mut self) {
-        self.tabs.next()
-    }
-
-    fn to_left(&mut self) {
-        self.tabs.previous()
-    }
-
-    fn toggle(&mut self, sink: &Sink) {
-        if sink.is_paused() {
-            sink.play()
-        } else {
-            sink.pause()
-        }
-    }
-
-    fn on_tick(&mut self) {
-        self.progress += 0.001;
-        if self.progress > 1.0 {
-            self.progress = 0.0
-        }
-        let value = self.barchart_data.pop().unwrap();
-        self.barchart_data.insert(0, value);
-    }
-
-    fn load_playlist(&mut self, sink: &mut Sink) {
-        for f in self.tasks.items.iter() {
-            let file = BufReader::new(File::open(f.clone()).unwrap());
-            let source = Decoder::new(file).unwrap();
-            sink.append(source);
-        }
-    }
-
-    fn music_play(&mut self, sink: &mut Sink) {
-        let offset = self.tasks.state.selected().unwrap();
-        let n = self.tasks.items.len();
-        for i in offset..n {
-            let file = BufReader::new(File::open(&self.tasks.items[i]).unwrap());
-            let source = Decoder::new(file).unwrap();
-            sink.append(source);
-            sink.play();
-        }
-        // let file = BufReader::new(File::open(self.tasks.items.get(offset).unwrap()).unwrap());
-        // let source = Decoder::new(file).unwrap();
-        // sink.append(source);
-        // sink.play();
-    }
-
-    fn key(&mut self, c: char, sink: &mut Sink) {
-        match c {
-            'q' => self.quit = true,
-            'h' => self.to_left(),
-            'l' => self.to_right(),
-            ' ' => self.toggle(&sink),
-            'j' => self.on_down(),
-            'k' => self.on_up(),
-            _ => {}
-        }
-    }
-}
-
-fn draw_gauge<B>(f: &mut Frame<B>, app: &App, chunk: Rect, sink: &Sink)
-where
-    B: Backend,
-{
+/// Draw the song progress bar.
+fn draw_gauge(f: &mut Frame, app: &App, chunk: Rect) {
     let label = Span::styled(
-        format!("{:.2}%", app.progress * 100.0),
+        format!(
+            "{:02}:{:02}/{:02}:{:02}",
+            app.cur_time.0, app.cur_time.1, app.tot_time.0, app.tot_time.1
+        ),
         Style::default()
             .fg(Color::White)
-            .add_modifier(Modifier::ITALIC | Modifier::BOLD),
+            .add_modifier(Modifier::BOLD),
     );
-    // let position = sink.position().unwrap().as_secs() as f64;
-    // let duration = sink.duration().unwrap().as_secs() as f64;
-    // let progress = (position / duration) * 100.0;
     let gauge = Gauge::default()
         .block(Block::default().title("Progress").borders(Borders::ALL))
-        .gauge_style(Style::default().fg(Color::Yellow))
+        .gauge_style(Style::default().fg(Color::Magenta))
         .label(label)
         .ratio(app.progress)
         .use_unicode(true);
     f.render_widget(gauge, chunk);
 }
 
-fn draw_list<B>(f: &mut Frame<B>, app: &mut App, chunk: Rect)
-where
-    B: Backend,
-{
+/// Draw all songs in a list
+fn draw_list(f: &mut Frame, app: &mut App, chunk: Rect) {
     let tasks: Vec<ListItem> = app
         .tasks
         .items
         .iter()
-        .map(|item| item.split_at(item.rfind('/').unwrap() + 1).1)
+        .map(|item| item.name.split_at(item.name.rfind('/').unwrap() + 1).1)
         .map(|i| ListItem::new(vec![Line::from(Span::raw(i.to_owned()))]))
         .collect();
+
     let tasks = List::new(tasks)
-        .block(Block::default().borders(Borders::ALL).title("List"))
+        .block(Block::default().borders(Borders::ALL).title("PlayList"))
         .highlight_style(
             Style::default()
                 .fg(Color::Blue)
@@ -246,21 +122,17 @@ where
     f.render_stateful_widget(tasks, chunk, &mut app.tasks.state);
 }
 
-fn draw_first_tab<B>(f: &mut Frame<B>, app: &mut App, chunk: Rect, sink: &Sink)
-where
-    B: Backend,
-{
+/// Draw the first tab ui
+fn draw_first_tab(f: &mut Frame, app: &mut App, chunk: Rect) {
     let chunks = Layout::default()
         .constraints([Constraint::Percentage(6), Constraint::Min(0)].as_ref())
         .split(chunk);
-    draw_gauge(f, app, chunks[0], &sink);
+    draw_gauge(f, app, chunks[0]);
     draw_list(f, app, chunks[1]);
 }
 
-fn draw_second_tab<B>(f: &mut Frame<B>, app: &App, chunk: Rect)
-where
-    B: Backend,
-{
+/// Draw the second tab ui
+fn draw_second_tab(f: &mut Frame, app: &App, chunk: Rect) {
     let barchart = BarChart::default()
         .block(Block::default().title("Data1").borders(Borders::ALL))
         .data(&app.barchart_data)
@@ -270,42 +142,36 @@ where
     f.render_widget(barchart, chunk);
 }
 
-pub fn ui<B>(f: &mut Frame<B>, app: &mut App, sink: &Sink)
-where
-    B: Backend,
-{
+/// Main logic about ui
+pub fn ui(f: &mut Frame, app: &mut App) {
     match app.tabs.index {
-        0 => draw_first_tab(f, app, f.size(), &sink),
-        1 => draw_second_tab(f, app, f.size()),
+        0 => draw_first_tab(f, app, f.area()),
+        1 => draw_second_tab(f, app, f.area()),
         _ => {}
     }
 }
 
-pub fn run<B: Backend>(
-    terminal: &mut Terminal<B>,
-    mut app: App,
-    tick_rate: Duration,
-    mut sink: Sink,
-) -> io::Result<()> {
-    let mut last_tick = Instant::now();
+/// Run the program, draw the terminal and handle the key pressed
+pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
+    let tick_rate = Duration::from_millis(250);
+    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+    let sink = Sink::try_new(&stream_handle).unwrap();
+    let mut app = App::new(sink);
+
     loop {
-        terminal.draw(|f| ui(f, &mut app, &sink))?;
+        terminal.draw(|f| ui(f, &mut app))?;
         let timeout = tick_rate
-            .checked_sub(last_tick.elapsed())
+            .checked_sub(app.last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));
         if crossterm::event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Enter => app.music_play(&mut sink),
-                    KeyCode::Char(c) => app.key(c, &mut sink),
-                    _ => {}
-                }
+            match event::read() {
+                Ok(ev) => app.handle_events(ev),
+                Err(e) => return Err(e.into()),
             }
         }
-        if last_tick.elapsed() >= tick_rate {
-            app.on_tick();
-            last_tick = Instant::now();
-        }
+
+        app.update(tick_rate);
+
         if app.quit {
             return Ok(());
         }

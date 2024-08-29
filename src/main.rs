@@ -1,41 +1,31 @@
-use std::{error::Error, io, time::Duration};
-
-use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
-use ratatui::{prelude::*, widgets::*};
-use rodio::{OutputStream, Sink};
-
+mod app;
 mod parse;
+mod term;
 mod ui;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+use color_eyre::Result;
+use term::Term;
 
-    let tick_rate = Duration::from_millis(250);
-    let app = ui::App::new();
-
-    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-    let sink = Sink::try_new(&stream_handle).unwrap();
-
-    let res = ui::run(&mut terminal, app, tick_rate, sink);
-
-    // restore terminal
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
+/// Main logical with tokio.
+async fn tokio_main() -> Result<()> {
+    let mut term = Term::new()?;
+    Term::start()?;
+    let res = ui::run(&mut term.terminal).await;
+    Term::stop()?;
     if let Err(err) = res {
-        println!("{:?}", err)
+        Err(err)
+    } else {
+        Ok(())
     }
-    Ok(())
+}
+
+/// Main function.
+#[tokio::main]
+async fn main() -> Result<()> {
+    if let Err(e) = tokio_main().await {
+        eprintln!("{} error: Something went wrong", env!("CARGO_PKG_NAME"));
+        Err(e)
+    } else {
+        Ok(())
+    }
 }
