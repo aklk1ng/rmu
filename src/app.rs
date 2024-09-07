@@ -135,27 +135,54 @@ impl<'a> App<'a> {
         }
     }
 
-    /// Now, when you press the enter to play this song, it will add remaining songs to the queue
-    /// of sounds to play.
-    pub fn music_play(&mut self) {
-        self.sink.stop();
-        let offset = match self.tasks.state.selected() {
+    /// Clear the queue of the sounds to play.
+    pub fn clear_list(&mut self) {
+        self.sink.clear();
+    }
+
+    /// Get current selected song offset in `Song` Vec.
+    fn get_offset(&mut self) -> usize {
+        match self.tasks.state.selected() {
             Some(n) => n,
             // In this case, just select the first song.
-            None => {
-                self.tasks.state.select(Some(0));
-                0
-            }
-        };
+            None => 0,
+        }
+    }
+
+    /// Append a song to the queue of sounds to play.
+    fn append_list(&mut self, offset: usize) {
+        // let offset = self.get_offset();
+        let file = BufReader::new(File::open(&self.tasks.items[offset].name).unwrap());
+        let source = Decoder::new(file).unwrap();
+        self.sink.append(source);
+    }
+
+    /// Add remaining songs to the queue of sounds to play.
+    fn load_list(&mut self, offset: usize) {
         // Init the `self.cur_idx`.
         self.cur_idx = Some(offset);
-        // Add remaining songs to the list.
+
         let n = self.tasks.items.len();
         for i in offset..n {
-            let file = BufReader::new(File::open(&self.tasks.items[i].name).unwrap());
-            let source = Decoder::new(file).unwrap();
-            self.sink.append(source);
-            self.sink.play();
+            self.append_list(i);
+        }
+        self.sink.play();
+    }
+
+    /// Now, when you press the enter to play this song, it will add remaining songs to the queue
+    /// of sounds to play.
+    pub fn start(&mut self) {
+        self.sink.stop();
+        let offset = self.get_offset();
+        self.load_list(offset);
+        self.tasks.state.select(Some(offset));
+    }
+
+    /// Replay current song.
+    pub fn replay(&mut self) {
+        match self.sink.try_seek(Duration::new(0, 0)) {
+            Ok(_) => {}
+            Err(e) => eprintln!("{}", e),
         }
     }
 
@@ -176,7 +203,7 @@ impl<'a> App<'a> {
         match ev {
             Event::Key(key) => match key.code {
                 KeyCode::Enter => {
-                    self.music_play();
+                    self.start();
                     self.start = true;
                 }
                 KeyCode::Char(c) => {
@@ -187,6 +214,8 @@ impl<'a> App<'a> {
                         ' ' => self.toggle(),
                         'j' => self.on_down(),
                         'k' => self.on_up(),
+                        'r' => self.replay(),
+                        'e' => self.clear_list(),
                         '+' => self.increase_volume(),
                         '-' => self.decrease_volume(),
                         _ => {}
@@ -213,28 +242,31 @@ impl<'a> App<'a> {
                 self.start = false;
             }
 
+            // Update the select song ui when the song play over.
+            if let Some(cur_idx) = self.cur_idx {
+                if self.tasks.items.len() - self.sink.len() > cur_idx {
+                    self.cur_idx = Some(self.tasks.items.len() - self.sink.len());
+                    self.tasks.state.select(self.cur_idx);
+                }
+            }
             self.on_tick();
             self.last_tick = Instant::now();
-            // Restore the select ui.
-            if self.select_tick.elapsed() >= Duration::from_secs(3) {
-                if let Some(cur_idx) = self.cur_idx {
-                    // Update the select song ui when the song play over.
-                    if self.tasks.items.len() - self.sink.len() > cur_idx {
-                        self.cur_idx = Some(self.tasks.items.len() - self.sink.len());
-                        self.tasks.state.select(self.cur_idx);
-                    }
+        }
+    }
 
-                    // Check current selected item whether is current play.
-                    if !self.sink.empty() || self.cur_idx.is_some() {
-                        if let Some(i) = self.tasks.state.selected() {
-                            if i != self.cur_idx.unwrap() {
-                                self.tasks.state.select(self.cur_idx)
-                            }
+    /// Recover the select ui.
+    pub fn recover_select(&mut self, tick_rate: Duration) {
+        if self.select_tick.elapsed() >= tick_rate {
+            if let Some(_) = self.cur_idx {
+                if !self.sink.empty() || self.cur_idx.is_some() {
+                    if let Some(i) = self.tasks.state.selected() {
+                        if i != self.cur_idx.unwrap() {
+                            self.tasks.state.select(self.cur_idx)
                         }
                     }
                 }
-                self.select_tick = Instant::now();
             }
+            self.select_tick = Instant::now();
         }
     }
 }

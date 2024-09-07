@@ -154,6 +154,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 /// Run the program, draw the terminal and handle the key pressed
 pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
     let tick_rate = Duration::from_millis(250);
+    let recover_delay = Duration::from_secs(3);
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
     let sink = Sink::try_new(&stream_handle).unwrap();
     let mut app = App::new(sink);
@@ -171,6 +172,7 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
         }
 
         app.update(tick_rate);
+        app.recover_select(recover_delay);
 
         if app.quit {
             return Ok(());
