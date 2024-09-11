@@ -12,6 +12,7 @@ use ratatui::{
 use rodio::OutputStream;
 use rodio::Sink;
 use std::time::Duration;
+use unicode_width::UnicodeWidthStr;
 
 pub struct Tabstatus<'a> {
     pub titles: Vec<&'a str>,
@@ -54,10 +55,8 @@ impl<T> StatefulList<T> {
             Some(i) => {
                 if self.items.is_empty() {
                     return;
-                } else if i >= self.items.len() - 1 {
-                    0
                 } else {
-                    i + 1
+                    i.saturating_add(1)
                 }
             }
             None => 0,
@@ -70,10 +69,8 @@ impl<T> StatefulList<T> {
             Some(i) => {
                 if self.items.is_empty() {
                     return;
-                } else if i == 0 {
-                    self.items.len() - 1
                 } else {
-                    i - 1
+                    i.saturating_sub(1)
                 }
             }
             None => 0,
@@ -94,7 +91,7 @@ fn draw_gauge(f: &mut Frame, app: &App, chunk: Rect) {
             .add_modifier(Modifier::BOLD),
     );
     let gauge = Gauge::default()
-        .block(Block::default().title("Progress").borders(Borders::ALL))
+        .block(Block::default().borders(Borders::NONE))
         .gauge_style(Style::default().fg(Color::Magenta))
         .label(label)
         .ratio(app.progress)
@@ -102,18 +99,30 @@ fn draw_gauge(f: &mut Frame, app: &App, chunk: Rect) {
     f.render_widget(gauge, chunk);
 }
 
-/// Draw all songs in a list
+/// Draw all songs's name and time in a list.
 fn draw_list(f: &mut Frame, app: &mut App, chunk: Rect) {
     let tasks: Vec<ListItem> = app
         .tasks
         .items
         .iter()
-        .map(|item| item.name.split_at(item.name.rfind('/').unwrap() + 1).1)
-        .map(|i| ListItem::new(vec![Line::from(Span::raw(i.to_owned()))]))
+        .map(|item| {
+            let name = item.name.split_at(item.name.rfind('/').unwrap() + 1).1;
+            let time = format!("{:02}:{:02}", item.time.0, item.time.1);
+
+            let padding = (chunk.width as usize)
+                .saturating_sub(UnicodeWidthStr::width(name))
+                .saturating_sub(time.len());
+            ListItem::new(vec![Line::from(Span::raw(format!(
+                "{}{}{}",
+                name,
+                " ".repeat(padding),
+                time
+            )))])
+        })
         .collect();
 
     let tasks = List::new(tasks)
-        .block(Block::default().borders(Borders::ALL).title("PlayList"))
+        .block(Block::default().borders(Borders::NONE))
         .highlight_style(
             Style::default()
                 .fg(Color::Blue)
@@ -122,16 +131,16 @@ fn draw_list(f: &mut Frame, app: &mut App, chunk: Rect) {
     f.render_stateful_widget(tasks, chunk, &mut app.tasks.state);
 }
 
-/// Draw the first tab ui
+/// Draw the first tab.
 fn draw_first_tab(f: &mut Frame, app: &mut App, chunk: Rect) {
     let chunks = Layout::default()
-        .constraints([Constraint::Percentage(6), Constraint::Min(0)].as_ref())
+        .constraints([Constraint::Percentage(1), Constraint::Min(0)].as_ref())
         .split(chunk);
     draw_gauge(f, app, chunks[0]);
     draw_list(f, app, chunks[1]);
 }
 
-/// Draw the second tab ui
+/// Draw the second tab.
 fn draw_second_tab(f: &mut Frame, app: &App, chunk: Rect) {
     let barchart = BarChart::default()
         .block(Block::default().title("Data1").borders(Borders::ALL))
@@ -142,7 +151,7 @@ fn draw_second_tab(f: &mut Frame, app: &App, chunk: Rect) {
     f.render_widget(barchart, chunk);
 }
 
-/// Main logic about ui
+/// Main logic about ui.
 pub fn ui(f: &mut Frame, app: &mut App) {
     match app.tabs.index {
         0 => draw_first_tab(f, app, f.area()),
@@ -151,7 +160,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     }
 }
 
-/// Run the program, draw the terminal and handle the key pressed
+/// Run the program, draw the terminal and handle the key pressed.
 pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
     let tick_rate = Duration::from_millis(250);
     let recover_delay = Duration::from_secs(3);
@@ -171,6 +180,7 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
             }
         }
 
+        // Just use timer to update special stuff.
         app.update(tick_rate);
         app.recover_select(recover_delay);
 

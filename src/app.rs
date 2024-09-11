@@ -142,11 +142,7 @@ impl<'a> App<'a> {
 
     /// Get current selected song offset in `Song` Vec.
     fn get_offset(&mut self) -> usize {
-        match self.tasks.state.selected() {
-            Some(n) => n,
-            // In this case, just select the first song.
-            None => 0,
-        }
+        self.tasks.state.selected().unwrap_or(0)
     }
 
     /// Append a song to the queue of sounds to play.
@@ -257,12 +253,10 @@ impl<'a> App<'a> {
     /// Recover the select ui.
     pub fn recover_select(&mut self, tick_rate: Duration) {
         if self.select_tick.elapsed() >= tick_rate {
-            if let Some(_) = self.cur_idx {
-                if !self.sink.empty() || self.cur_idx.is_some() {
-                    if let Some(i) = self.tasks.state.selected() {
-                        if i != self.cur_idx.unwrap() {
-                            self.tasks.state.select(self.cur_idx)
-                        }
+            if self.cur_idx.is_some() && (!self.sink.empty() || self.cur_idx.is_some()) {
+                if let Some(i) = self.tasks.state.selected() {
+                    if i != self.cur_idx.unwrap() {
+                        self.tasks.state.select(self.cur_idx)
                     }
                 }
             }
