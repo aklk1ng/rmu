@@ -39,7 +39,7 @@ pub fn playlist() -> Vec<Song> {
 
     let path = match parse_toml() {
         Ok(config) => config.path,
-        Err(_) => panic!("HOME/.config/Music_Player/config.toml not found!"),
+        Err(_) => panic!("Error when parse the config file."),
     };
 
     // Get all songs name
