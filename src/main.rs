@@ -8,10 +8,11 @@ use term::Term;
 
 /// Main logical with tokio.
 async fn tokio_main() -> Result<()> {
+    color_eyre::install()?;
     let mut term = Term::new()?;
     Term::start()?;
     let res = ui::run(&mut term.terminal).await;
-    Term::stop()?;
+    Term::restore()?;
     if let Err(err) = res {
         Err(err)
     } else {

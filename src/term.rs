@@ -27,11 +27,12 @@ impl Term {
             EnableMouseCapture,
             cursor::Hide
         )?;
+        set_panic_hook();
         Ok(())
     }
 
     /// Restore terminal to normal.
-    pub fn stop() -> Result<()> {
+    pub fn restore() -> Result<()> {
         crossterm::execute!(
             std::io::stderr(),
             LeaveAlternateScreen,
@@ -41,4 +42,13 @@ impl Term {
         crossterm::terminal::disable_raw_mode()?;
         Ok(())
     }
+}
+
+/// Register the hook when the panic happened in running.
+fn set_panic_hook() {
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let _ = Term::restore(); // ignore any errors as we are already failing
+        hook(panic_info);
+    }));
 }
