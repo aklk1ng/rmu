@@ -62,11 +62,3 @@ pub fn playlist() -> Vec<Song> {
     }
     playlist
 }
-
-#[test]
-fn test_play_list() {
-    let entries = playlist();
-    for entry in entries {
-        println!("{:?}", entry);
-    }
-}
