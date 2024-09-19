@@ -53,13 +53,7 @@ impl<T> StatefulList<T> {
 
     pub fn next(&mut self) {
         let i = match self.state.selected() {
-            Some(i) => {
-                if self.items.is_empty() {
-                    return;
-                } else {
-                    i.saturating_add(1)
-                }
-            }
+            Some(i) => (i + 1) % self.items.len(),
             None => 0,
         };
         self.state.select(Some(i));
@@ -68,10 +62,10 @@ impl<T> StatefulList<T> {
     pub fn previous(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
-                if self.items.is_empty() {
-                    return;
+                if i > 0 {
+                    i - 1
                 } else {
-                    i.saturating_sub(1)
+                    self.items.len() - 1
                 }
             }
             None => 0,

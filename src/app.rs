@@ -75,12 +75,12 @@ impl<'a> App<'a> {
     }
 
     /// Select the previous song.
-    pub fn on_up(&mut self) {
+    pub fn select_up(&mut self) {
         self.tasks.previous();
     }
 
     /// Select the next song.
-    pub fn on_down(&mut self) {
+    pub fn select_down(&mut self) {
         self.tasks.next();
     }
 
@@ -208,8 +208,8 @@ impl<'a> App<'a> {
                         'h' => self.tab_left(),
                         'l' => self.tab_next(),
                         ' ' => self.toggle(),
-                        'j' => self.on_down(),
-                        'k' => self.on_up(),
+                        'j' => self.select_down(),
+                        'k' => self.select_up(),
                         'r' => self.replay(),
                         'e' => self.clear_list(),
                         '+' => self.increase_volume(),
@@ -221,8 +221,8 @@ impl<'a> App<'a> {
                 _ => {}
             },
             Event::Mouse(mouse) => match mouse.kind {
-                MouseEventKind::ScrollDown => self.on_down(),
-                MouseEventKind::ScrollUp => self.on_up(),
+                MouseEventKind::ScrollDown => self.select_down(),
+                MouseEventKind::ScrollUp => self.select_up(),
                 _ => {}
             },
             _ => {}
