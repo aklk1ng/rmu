@@ -5,6 +5,7 @@ use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
+    symbols,
     text::{Line, Span},
     widgets::*,
     Frame, Terminal,
@@ -86,16 +87,13 @@ fn draw_gauge(f: &mut Frame, app: &App, chunk: Rect) {
             "{:02}:{:02}/{:02}:{:02}",
             app.cur_time.0, app.cur_time.1, app.tot_time.0, app.tot_time.1
         ),
-        Style::default()
-            .fg(Color::White)
-            .add_modifier(Modifier::BOLD),
+        Style::default().fg(Color::Yellow),
     );
-    let gauge = Gauge::default()
-        .block(Block::default().borders(Borders::NONE))
-        .gauge_style(Style::default().fg(Color::Magenta))
+    let gauge = LineGauge::default()
+        .filled_style(Style::default().fg(Color::Magenta))
+        .line_set(symbols::line::THICK)
         .label(label)
-        .ratio(app.progress)
-        .use_unicode(true);
+        .ratio(app.progress);
     f.render_widget(gauge, chunk);
 }
 
@@ -143,11 +141,10 @@ fn draw_first_tab(f: &mut Frame, app: &mut App, chunk: Rect) {
 /// Draw the second tab.
 fn draw_second_tab(f: &mut Frame, app: &App, chunk: Rect) {
     let barchart = BarChart::default()
-        .block(Block::default().title("Data1").borders(Borders::ALL))
         .data(&app.barchart_data)
-        .bar_width(9)
+        .bar_width(7)
         .bar_style(Style::default().fg(Color::Yellow))
-        .value_style(Style::default().fg(Color::Black).bg(Color::Yellow));
+        .value_style(Style::default().fg(Color::Yellow).bg(Color::Yellow));
     f.render_widget(barchart, chunk);
 }
 
