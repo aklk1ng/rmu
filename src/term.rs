@@ -19,7 +19,7 @@ impl Term {
     }
 
     /// Start the terminal raw mode and enable some features.
-    pub fn start() -> Result<()> {
+    pub fn start(&self) -> Result<()> {
         crossterm::terminal::enable_raw_mode()?;
         crossterm::execute!(
             std::io::stderr(),

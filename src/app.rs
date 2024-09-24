@@ -1,4 +1,4 @@
-use crate::{parse, ui::*};
+use crate::{config, ui::*};
 use crossterm::event::{Event, KeyCode, MouseEventKind};
 use rodio::{Decoder, Sink};
 use std::fs::File;
@@ -63,7 +63,7 @@ impl<'a> App<'a> {
                 ("B23", 3),
                 ("B24", 5),
             ],
-            tasks: StatefulList::with_items(parse::playlist()),
+            tasks: StatefulList::with_items(config::playlist()),
             tot_time: (0, 0),
             cur_time: (0, 0),
             sink,

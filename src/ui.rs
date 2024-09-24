@@ -1,14 +1,13 @@
-use crate::app::*;
+use crate::{app::*, term::Term};
 use color_eyre::Result;
 use crossterm::event::{self};
 use ratatui::{
-    backend::Backend,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols,
     text::{Line, Span},
     widgets::*,
-    Frame, Terminal,
+    Frame,
 };
 use rodio::OutputStream;
 use rodio::Sink;
@@ -152,15 +151,17 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 }
 
 /// Run the program, draw the terminal and handle the key pressed.
-pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
-    let tick_rate = Duration::from_millis(250);
+pub async fn run() -> Result<()> {
+    let mut term = Term::new()?;
+    term.start()?;
+    let tick_rate = Duration::from_millis(200);
     let recover_delay = Duration::from_secs(3);
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
     let sink = Sink::try_new(&stream_handle).unwrap();
     let mut app = App::new(sink);
 
     loop {
-        terminal.draw(|f| ui(f, &mut app))?;
+        term.terminal.draw(|f| ui(f, &mut app))?;
         let timeout = tick_rate
             .checked_sub(app.last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));
@@ -176,7 +177,10 @@ pub async fn run<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
         app.recover_select(recover_delay);
 
         if app.quit {
-            return Ok(());
+            break;
         }
     }
+
+    Term::restore()?;
+    Ok(())
 }
