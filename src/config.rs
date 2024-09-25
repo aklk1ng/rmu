@@ -48,11 +48,10 @@ pub fn playlist() -> Vec<Song> {
                 let file = File::open(&path).unwrap(); // Replace with your file path
                 let source = Decoder::new(BufReader::new(file)).unwrap();
                 let total_duration = source.total_duration().unwrap_or(Duration::from_secs(0));
-                let total_minutes = total_duration.as_secs() / 60;
-                let total_seconds = total_duration.as_secs() % 60;
+                let time = total_duration.as_secs_f64();
                 playlist.push(Song {
                     name: String::from(path.to_str().unwrap()),
-                    time: (total_minutes, total_seconds),
+                    time,
                 });
             }
         }

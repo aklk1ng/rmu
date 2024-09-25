@@ -9,15 +9,15 @@ use std::time::{Duration, Instant};
 #[derive(Debug)]
 pub struct Song {
     pub name: String,
-    pub time: (u64, u64),
+    pub time: f64,
 }
 
 /// `App` contains all neccessary elements when running.
 pub struct App<'a> {
     pub tabs: Tabstatus<'a>,
     pub progress: f64,
-    pub tot_time: (u64, u64),
-    pub cur_time: (u64, u64),
+    pub tot_time: f64,
+    pub cur_time: f64,
     pub cur_idx: Option<usize>,
     pub start: bool,
     pub quit: bool,
@@ -64,8 +64,8 @@ impl<'a> App<'a> {
                 ("B24", 5),
             ],
             tasks: StatefulList::with_items(config::playlist()),
-            tot_time: (0, 0),
-            cur_time: (0, 0),
+            tot_time: 0.0,
+            cur_time: 0.0,
             sink,
             cur_idx: None,
             volume: 1.0,
@@ -103,33 +103,33 @@ impl<'a> App<'a> {
         }
     }
 
-    /// The handle about the `App.progress`.
+    /// The handle about the information needed.
     pub fn on_tick(&mut self) {
         self.set_progress();
         let value = self.barchart_data.pop().unwrap();
         self.barchart_data.insert(0, value);
     }
 
-    /// Recalculate the progress bar information.
+    /// Calculate the progress bar information.
     pub fn set_progress(&mut self) {
         match self.cur_idx {
             Some(i) => {
-                let time = self.sink.get_pos();
-                let minutes = time.as_secs() / 60;
-                let seconds = time.as_secs() % 60;
-                self.cur_time = (minutes, seconds);
+                let mut time = self.sink.get_pos().as_secs_f64();
+                self.cur_time = time;
                 self.tot_time = self.tasks.items[i].time;
                 match self.tot_time {
-                    (0, 0) => self.progress = 0.0,
+                    0.0 => self.progress = 0.0,
                     _ => {
-                        self.progress = (self.cur_time.0 * 60 + self.cur_time.1) as f64
-                            / (self.tot_time.0 * 60 + self.tot_time.1) as f64;
+                        if time > self.tot_time {
+                            time = self.tot_time
+                        }
+                        self.progress = time / self.tot_time;
                     }
                 }
             }
             None => {
-                self.cur_time = (0, 0);
-                self.tot_time = (0, 0);
+                self.cur_time = 0.0;
+                self.tot_time = 0.0;
                 self.progress = 0.0;
             }
         }
@@ -167,7 +167,7 @@ impl<'a> App<'a> {
 
     /// Now, when you press the enter to play this song, it will add remaining songs to the queue
     /// of sounds to play.
-    pub fn start(&mut self) {
+    pub fn play(&mut self) {
         self.sink.stop();
         let offset = self.get_offset();
         self.load_list(offset);
@@ -199,7 +199,7 @@ impl<'a> App<'a> {
         match ev {
             Event::Key(key) => match key.code {
                 KeyCode::Enter => {
-                    self.start();
+                    self.play();
                     self.start = true;
                 }
                 KeyCode::Char(c) => {

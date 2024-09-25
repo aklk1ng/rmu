@@ -78,7 +78,10 @@ fn draw_gauge(f: &mut Frame, app: &App, chunk: Rect) {
     let label = Span::styled(
         format!(
             "{:02}:{:02}/{:02}:{:02}",
-            app.cur_time.0, app.cur_time.1, app.tot_time.0, app.tot_time.1
+            (app.cur_time / 60.0) as u64,
+            (app.cur_time % 60.0) as u64,
+            (app.tot_time / 60.0) as u64,
+            (app.tot_time % 60.0) as u64,
         ),
         Style::default().fg(Color::Yellow),
     );
@@ -98,7 +101,11 @@ fn draw_list(f: &mut Frame, app: &mut App, chunk: Rect) {
         .iter()
         .map(|item| {
             let name = item.name.split_at(item.name.rfind('/').unwrap() + 1).1;
-            let time = format!("{:02}:{:02}", item.time.0, item.time.1);
+            let time = format!(
+                "{:02}:{:02}",
+                (item.time / 60.0) as u64,
+                (item.time % 60.0) as u64
+            );
 
             let padding = (chunk.width as usize)
                 .saturating_sub(UnicodeWidthStr::width(name))
