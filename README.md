@@ -1,6 +1,6 @@
 ![](./picture.png)
 
-## $XDG_CONFIG_HOME/Music_Player/config.toml
+## $XDG_CONFIG_HOME/rmu/config.toml
 
 ```text
 path = "YOUR_MUSIC_DIR"

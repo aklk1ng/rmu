@@ -15,8 +15,9 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Result<Self> {
+        let crate_name = env!("CARGO_CRATE_NAME");
         let home_dir = std::env::var("HOME")?;
-        let mut config_file = File::open(format!("{home_dir}/.config/Music_Player/config.toml"))?;
+        let mut config_file = File::open(format!("{home_dir}/.config/{crate_name}/config.toml"))?;
         let mut contents = String::new();
         config_file.read_to_string(&mut contents)?;
         let mut config: Config = toml::from_str(&contents)?;
