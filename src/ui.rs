@@ -132,7 +132,7 @@ fn draw_list(f: &mut Frame, app: &mut App, chunk: Rect) {
 /// Draw the first tab.
 fn draw_first_tab(f: &mut Frame, app: &mut App, chunk: Rect) {
     let chunks = Layout::default()
-        .constraints([Constraint::Percentage(1), Constraint::Min(0)].as_ref())
+        .constraints([Constraint::Length(1), Constraint::Min(0)].as_ref())
         .split(chunk);
     draw_gauge(f, app, chunks[0]);
     draw_list(f, app, chunks[1]);

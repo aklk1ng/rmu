@@ -1,5 +1,6 @@
 mod app;
 mod config;
+mod input;
 mod term;
 mod ui;
 
