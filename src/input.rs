@@ -1,5 +1,9 @@
 use color_eyre::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::{
+    cursor::{CursorShape, SetCursorShape},
+    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+    execute,
+};
 use ratatui::{
     layout::{Constraint, Layout, Position},
     style::{Style, Stylize},
@@ -7,6 +11,7 @@ use ratatui::{
     widgets::{Block, Paragraph, Wrap},
     Frame,
 };
+use unicode_width::UnicodeWidthChar;
 
 use crate::term::Term;
 
@@ -20,7 +25,6 @@ pub struct Input {
     pub path: String,
 }
 
-// TODO: Current implement can't handle the multi-byte characters like Chinese.
 impl Input {
     pub fn new() -> Self {
         Self {
@@ -44,8 +48,7 @@ impl Input {
 
     /// Move cursor to beginning.
     fn move_cursor_begin(&mut self) {
-        let cursor_moved_begin = 0;
-        self.char_idx = self.clamp_cursor(cursor_moved_begin);
+        self.char_idx = self.clamp_cursor(0);
     }
 
     /// Move cursor to end.
@@ -111,6 +114,7 @@ impl Input {
 
     pub fn run(&mut self) -> Result<()> {
         let mut term = Term::new()?;
+        set_bar_cursor();
         loop {
             term.terminal.draw(|frame| self.draw(frame))?;
 
@@ -125,11 +129,9 @@ impl Input {
                             self.submit();
                             break;
                         }
-                        (KeyCode::Char(to_insert), KeyModifiers::NONE) => {
-                            self.enter_char(to_insert)
-                        }
                         (KeyCode::Backspace, KeyModifiers::NONE) => self.delete_char(),
                         (KeyCode::Esc, KeyModifiers::NONE) => break,
+                        (KeyCode::Char(to_insert), _) => self.enter_char(to_insert),
                         _ => {}
                     }
                 }
@@ -170,16 +172,25 @@ impl Input {
         let input = Paragraph::new(self.input.as_str())
             .style(Style::default())
             .block(Block::bordered().title("Input"))
-            .wrap(Wrap { trim: true });
+            .wrap(Wrap { trim: false });
         frame.render_widget(input, input_area);
         // Make the cursor visible and ask ratatui to put it at the specified coordinates after rendering
         #[allow(clippy::cast_possible_truncation)]
         frame.set_cursor_position(Position::new(
             // Draw the cursor at the current position in the input field.
-            // This position is can be controlled via the left and right arrow key
-            input_area.x + self.char_idx as u16 + 1,
-            // Move one line down, from the border to the input line
+            input_area.x
+                + self
+                    .input
+                    .chars()
+                    .take(self.char_idx)
+                    .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
+                    .sum::<usize>() as u16
+                + 1,
             input_area.y + 1,
         ))
     }
+}
+
+fn set_bar_cursor() {
+    execute!(std::io::stdout(), SetCursorShape(CursorShape::Line)).unwrap();
 }
