@@ -56,6 +56,7 @@ impl Input {
         self.char_idx = self.clamp_cursor(usize::MAX);
     }
 
+    /// Input a char to input.
     fn enter_char(&mut self, new_char: char) {
         let index = self.byte_index();
         self.input.insert(index, new_char);
@@ -97,6 +98,7 @@ impl Input {
         }
     }
 
+    /// Clamp the cursor position value betweeen 0 to input chars.
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
         new_cursor_pos.clamp(0, self.input.chars().count())
     }
@@ -106,6 +108,7 @@ impl Input {
         self.char_idx = 0;
     }
 
+    /// Submit the input to path.
     fn submit(&mut self) {
         self.path = self.input.clone();
         self.input.clear();

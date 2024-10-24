@@ -165,7 +165,7 @@ pub async fn run() -> Result<()> {
     let recover_delay = Duration::from_secs(3);
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
     let sink = Sink::try_new(&stream_handle).unwrap();
-    let mut app = App::new(sink);
+    let mut app = App::new(sink).await;
 
     loop {
         term.terminal.draw(|f| ui(f, &mut app))?;

@@ -1,11 +1,11 @@
 use color_eyre::Result;
-use dirs::home_dir;
 use rodio::{Decoder, Source};
 use serde_derive::Deserialize;
-use std::fs::{self, metadata, File};
-use std::io::{BufReader, Read, Write};
-use std::path::Path;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
+use tokio::fs;
 
 use crate::app::Song;
 use crate::input::Input;
@@ -16,100 +16,100 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         let crate_name = env!("CARGO_CRATE_NAME");
-        let home_dir = std::env::var("HOME")?;
-        let config_path = format!("{home_dir}/.config/{crate_name}/config.toml");
-        let cache_path = format!("{home_dir}/.cache/{crate_name}/config");
-        if let Ok(mut config_file) = File::open(config_path) {
-            let mut contents = String::new();
-            config_file.read_to_string(&mut contents)?;
-            let mut config: Config = toml::from_str(&contents)?;
-            // In this case, update the cache file
-            let mut file = File::create(cache_path)?;
-            file.write_all(config.path.as_bytes())?;
 
-            config.path = expand_var(&config.path);
-            Ok(config)
+        let mut config_path = if let Ok(config_dir) = std::env::var("XDG_CONFIG_HOME") {
+            PathBuf::from(config_dir)
+        } else if let Ok(home_dir) = std::env::var("HOME") {
+            let mut path = PathBuf::from(home_dir);
+            path.push(".config");
+            path
         } else {
-            // Check the cache file whether exists
-            if !Path::new(&cache_path).exists() {
-                fs::create_dir_all(format!("{home_dir}/.cache/{crate_name}/"))?;
-                File::create(cache_path.clone())?;
-            } else {
-                // In this case, read the config as the path
-                let mut file = File::open(cache_path.clone())?;
-                match metadata(cache_path.clone()) {
-                    Ok(f) => {
-                        if f.len() != 0 {
-                            let mut path = String::new();
-                            file.read_to_string(&mut path)?;
-                            path = expand_var(&path);
-                            return Ok(Self { path });
-                        }
-                    }
-                    Err(e) => panic!("{}", e),
-                }
-            }
+            panic!("Neither XDG_CONFIG_HOME nor HOME environment variables are set");
+        };
+        config_path.push(crate_name);
+        config_path.push("config.toml");
 
-            // In this case, create a box to input config file path.
-            let mut input = Input::new();
-            match input.run() {
-                Ok(_) => {
-                    // Backup in cache dir
-                    let mut file = File::create(cache_path)?;
-                    file.write_all(input.path.as_bytes())?;
-                    let path = expand_var(&input.path);
-                    Ok(Self { path })
+        match fs::read_to_string(&config_path).await {
+            Ok(contents) => {
+                let mut config: Config = toml::from_str(&contents)?;
+                config.path = expand_var(&config.path);
+                Ok(config)
+            }
+            Err(_) => {
+                let path = Path::new(&config_path);
+                if !path.exists() {
+                    if let Some(parent) = path.parent() {
+                        fs::create_dir_all(parent).await?;
+                    }
                 }
-                Err(e) => Err(e),
+
+                // In this case, create a box to input config file path.
+                let mut input = Input::new();
+                match input.run() {
+                    Ok(_) => {
+                        let content = format!("path = \"{}\"", input.path);
+                        fs::write(config_path, content.as_bytes()).await?;
+                        let path = expand_var(&input.path);
+                        Ok(Self { path })
+                    }
+                    Err(e) => Err(e),
+                }
             }
         }
     }
 }
 
-/// Replace the `~` to env `HOME` possible in config file path.
+/// Replace environment variable.
 fn expand_var(path: &str) -> String {
+    // Expand `~` variable.
     if path.starts_with('~') {
-        if let Some(home) = home_dir() {
-            return path.replacen("~", home.to_str().unwrap(), 1);
+        if let Ok(home) = std::env::var("HOME") {
+            return path.replacen("~", &home, 1).to_string();
         }
     }
     path.to_string()
 }
 
-pub fn playlist() -> Vec<Song> {
+pub async fn playlist() -> Result<Vec<Song>> {
     let mut playlist = Vec::new();
-    let config = Config::new().unwrap();
+    let config = Config::new().await.unwrap();
 
     // Get all songs name
-    for entry in fs::read_dir(config.path).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if let Some(extension) = path.extension() {
-            if extension == "mp3" || extension == "mp4" || extension == "wav" {
-                let file = File::open(&path).unwrap(); // Replace with your file path
-                let source = Decoder::new(BufReader::new(file)).unwrap();
-                let total_duration = source.total_duration().unwrap_or(Duration::from_secs(0));
-                let time = total_duration.as_secs_f64();
-                playlist.push(Song {
-                    name: String::from(path.to_str().unwrap()),
-                    time,
-                });
+    let mut dir = fs::read_dir(config.path).await.unwrap();
+    while let Ok(entry) = dir.next_entry().await {
+        match entry {
+            Some(entry) => {
+                let path = entry.path();
+                if let Some(extension) = path.extension() {
+                    if extension == "mp3" || extension == "mp4" || extension == "wav" {
+                        let file = File::open(&path)?; // Replace with your file path
+                        let source = Decoder::new(BufReader::new(file)).unwrap();
+                        let total_duration =
+                            source.total_duration().unwrap_or(Duration::from_secs(0));
+                        let time = total_duration.as_secs_f64();
+                        playlist.push(Song {
+                            name: String::from(path.to_str().unwrap()),
+                            time,
+                        });
+                    }
+                }
             }
+            None => break,
         }
     }
-    playlist
+    Ok(playlist)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_playlist() {
-        let entries = playlist();
-        for entry in entries {
+    #[tokio::test]
+    async fn test_playlist() {
+        let entries = playlist().await;
+        for entry in entries.unwrap() {
             println!("{:?}", entry);
         }
     }

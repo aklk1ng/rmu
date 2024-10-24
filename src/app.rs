@@ -31,7 +31,7 @@ pub struct App<'a> {
 
 impl<'a> App<'a> {
     /// Create the `App`
-    pub fn new(sink: Sink) -> App<'a> {
+    pub async fn new(sink: Sink) -> App<'a> {
         App {
             tabs: Tabstatus::new(vec!["Tab1", "Tab2"]),
             progress: 0.0,
@@ -63,7 +63,7 @@ impl<'a> App<'a> {
                 ("B23", 3),
                 ("B24", 5),
             ],
-            tasks: StatefulList::with_items(config::playlist()),
+            tasks: StatefulList::with_items(config::playlist().await.unwrap()),
             tot_time: 0.0,
             cur_time: 0.0,
             sink,
