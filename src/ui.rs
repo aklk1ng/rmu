@@ -20,7 +20,7 @@ pub struct Tabstatus<'a> {
 }
 
 impl<'a> Tabstatus<'a> {
-    pub fn new(titles: Vec<&'a str>) -> Tabstatus {
+    pub fn new(titles: Vec<&'a str>) -> Self {
         Tabstatus { titles, index: 0 }
     }
 
